@@ -19366,7 +19366,8 @@
         var item = {
           name: rawItem.name,
           displayName: rawItem.displayName,
-          type: rawItem.type
+          type: rawItem.type,
+          stack: rawItem.stack
         };
         // User can set null in dimensions.
         // We don't auto specify name, otherwise a given name may
@@ -29619,13 +29620,16 @@
             var dimInfo = data._dimInfos[dim];
             // Currently, only dimensions that has ordinalMeta can create inverted indices.
             var ordinalMeta = dimInfo.ordinalMeta;
+            var stack = dimInfo.stack;
             var store = data._store;
-            if (ordinalMeta) {
-              invertedIndices = invertedIndicesMap[dim] = new CtorInt32Array$1(ordinalMeta.categories.length);
-              // The default value of TypedArray is 0. To avoid miss
-              // mapping to 0, we should set it as INDEX_NOT_FOUND.
-              for (var i = 0; i < invertedIndices.length; i++) {
-                invertedIndices[i] = INDEX_NOT_FOUND;
+            if (ordinalMeta || stack) {
+              invertedIndices = invertedIndicesMap[dim] = stack ? new Array(store.count()) : new CtorInt32Array$1(ordinalMeta.categories.length);
+              if (ordinalMeta) {
+                // The default value of TypedArray is 0. To avoid miss
+                // mapping to 0, we should set it as INDEX_NOT_FOUND.
+                for (var i = 0; i < invertedIndices.length; i++) {
+                  invertedIndices[i] = INDEX_NOT_FOUND;
+                }
               }
               for (var i = 0; i < store.count(); i++) {
                 // Only support the case that all values are distinct.
@@ -29765,6 +29769,9 @@
           }
           dimDefItem.type != null && (resultItem.type = dimDefItem.type);
           dimDefItem.displayName != null && (resultItem.displayName = dimDefItem.displayName);
+          if (dimDefItem.stack) {
+            resultItem.stack = true;
+          }
           var newIdx = resultList.length;
           indicesMap[dimIdx] = newIdx;
           resultItem.storeDimIndex = dimIdx;
@@ -30148,7 +30155,7 @@
         }
         if (mayStack && !dimensionInfo.isExtraCoord) {
           // Find the first ordinal dimension as the stackedByDimInfo.
-          if (!byIndex && !stackedByDimInfo && dimensionInfo.ordinalMeta) {
+          if (!byIndex && !stackedByDimInfo && (dimensionInfo.ordinalMeta || dimensionInfo.stack)) {
             stackedByDimInfo = dimensionInfo;
           }
           // Find the first stackable dimension as the stackedDimInfo.
@@ -30732,12 +30739,16 @@
     var roundNumber = round;
     var IntervalScale = /** @class */function (_super) {
       __extends(IntervalScale, _super);
-      function IntervalScale() {
-        var _this = _super !== null && _super.apply(this, arguments) || this;
+      function IntervalScale(settings) {
+        var _this = _super.call(this, settings) || this;
         _this.type = 'interval';
         // Step is calculated in adjustExtent.
         _this._interval = 0;
         _this._intervalPrecision = 2;
+        var ticksGenerator = _this.getSetting('ticksGenerator');
+        if (isFunction(ticksGenerator)) {
+          _this._ticksGenerator = ticksGenerator;
+        }
         return _this;
       }
       IntervalScale.prototype.parse = function (val) {
@@ -30787,7 +30798,17 @@
         var extent = this._extent;
         var niceTickExtent = this._niceExtent;
         var intervalPrecision = this._intervalPrecision;
-        var ticks = [];
+        var ticksGenerator = this._ticksGenerator;
+        var ticks;
+        if (ticksGenerator) {
+          try {
+            ticks = ticksGenerator(extent, interval, niceTickExtent, intervalPrecision);
+            if (ticks) {
+              return ticks;
+            }
+          } catch (_e) {}
+        }
+        ticks = [];
         // If interval is 0, return [];
         if (!interval) {
           return ticks;
@@ -32260,6 +32281,10 @@
               locale: model.ecModel.getLocaleModel(),
               useUTC: model.ecModel.get('useUTC')
             });
+          case 'value':
+            return new IntervalScale({
+              ticksGenerator: model.getTicksGenerator()
+            });
           default:
             // case 'value'/'interval', 'log', or others.
             return new (Scale.getClass(axisType) || IntervalScale)();
@@ -33424,6 +33449,19 @@
        * Get width of band
        */
       Axis.prototype.getBandWidth = function () {
+        if (this.type === 'time') {
+          var timeAxisModel = this.model;
+          var bandWidthCalculator = timeAxisModel.get('bandWidthCalculator');
+          var bandWidth = void 0;
+          if (isFunction(bandWidthCalculator)) {
+            try {
+              bandWidth = bandWidthCalculator(timeAxisModel);
+              if (bandWidth) {
+                return bandWidth;
+              }
+            } catch (_e) {}
+          }
+        }
         var axisExtent = this._extent;
         var dataExtent = this.scale.getExtent();
         var len = dataExtent[1] - dataExtent[0] + (this.onBand ? 1 : 0);
@@ -42200,6 +42238,12 @@
           AxisModel.prototype.getOrdinalMeta = function () {
             return this.__ordinalMeta;
           };
+          AxisModel.prototype.getTicksGenerator = function () {
+            var option = this.option;
+            if (option.type === 'value') {
+              return option.ticksGenerator;
+            }
+          };
           AxisModel.type = axisName + 'Axis.' + axisType;
           AxisModel.defaultOption = defaultOption;
           return AxisModel;
@@ -42612,11 +42656,11 @@
             var scale = axis.scale;
             if (
             // Only value and log axis without interval support alignTicks.
-            isIntervalOrLogScale(scale) && model.get('alignTicks') && model.get('interval') == null) {
+            isIntervalOrLogScale(scale) && model.get('alignTicks') && model.get('interval') == null && model.getTicksGenerator() == null) {
               axisNeedsAlign.push(axis);
             } else {
               niceScaleExtent(scale, model);
-              if (isIntervalOrLogScale(scale)) {
+              if (isIntervalOrLogScale(scale) && !scale.isBlank()) {
                 // Can only align to interval or log axis.
                 alignTo = axis;
               }
@@ -42625,13 +42669,18 @@
           // All axes has set alignTicks. Pick the first one.
           // PENDING. Should we find the axis that both set interval, min, max and align to this one?
           if (axisNeedsAlign.length) {
-            if (!alignTo) {
-              alignTo = axisNeedsAlign.pop();
-              niceScaleExtent(alignTo.scale, alignTo.model);
+            while (!alignTo && axisNeedsAlign.length) {
+              var axis = axisNeedsAlign.pop();
+              niceScaleExtent(axis.scale, axis.model);
+              if (!axis.scale.isBlank()) {
+                alignTo = axis;
+              }
             }
-            each(axisNeedsAlign, function (axis) {
-              alignScaleTicks(axis.scale, axis.model, alignTo.scale);
-            });
+            if (axisNeedsAlign.length && alignTo) {
+              each(axisNeedsAlign, function (axis) {
+                alignScaleTicks(axis.scale, axis.model, alignTo.scale);
+              });
+            }
           }
         }
         updateAxisTicks(axesMap.x);
@@ -46982,7 +47031,10 @@
             return axisProxy.getDataValueWindow();
           }
         } else {
-          return this.getAxisProxy(axisDim, axisIndex).getDataValueWindow();
+          var axisProxy = this.getAxisProxy(axisDim, axisIndex);
+          if (axisProxy) {
+            return axisProxy.getDataValueWindow();
+          }
         }
       };
       /**
@@ -47001,10 +47053,10 @@
           var axisInfo = this._targetAxisInfoMap.get(axisDim);
           for (var j = 0; j < axisInfo.indexList.length; j++) {
             var proxy = this.getAxisProxy(axisDim, axisInfo.indexList[j]);
-            if (proxy.hostedBy(this)) {
+            if (proxy && proxy.hostedBy(this)) {
               return proxy;
             }
-            if (!firstProxy) {
+            if (proxy && !firstProxy) {
               firstProxy = proxy;
             }
           }
@@ -47538,7 +47590,10 @@
           // init stage and not after action dispatch handler, because
           // reset should be called after seriesData.restoreData.
           dataZoomModel.eachTargetAxis(function (axisDim, axisIndex) {
-            dataZoomModel.getAxisProxy(axisDim, axisIndex).reset(dataZoomModel);
+            var axisProxy = dataZoomModel.getAxisProxy(axisDim, axisIndex);
+            if (axisProxy) {
+              axisProxy.reset(dataZoomModel);
+            }
           });
           // Caution: data zoom filtering is order sensitive when using
           // percent range and no min/max/scale set on axis.
@@ -47555,7 +47610,10 @@
           // So we should filter x-axis after reset x-axis immediately,
           // and then reset y-axis and filter y-axis.
           dataZoomModel.eachTargetAxis(function (axisDim, axisIndex) {
-            dataZoomModel.getAxisProxy(axisDim, axisIndex).filterData(dataZoomModel, api);
+            var axisProxy = dataZoomModel.getAxisProxy(axisDim, axisIndex);
+            if (axisProxy) {
+              axisProxy.filterData(dataZoomModel, api);
+            }
           });
         });
         ecModel.eachComponent('dataZoom', function (dataZoomModel) {
@@ -49920,9 +49978,12 @@
           var axisModel = axis.model;
           var dataZoomModel = findDataZoom(dimName, axisModel, ecModel);
           // Restrict range.
-          var minMaxSpan = dataZoomModel.findRepresentativeAxisProxy(axisModel).getMinMaxSpan();
-          if (minMaxSpan.minValueSpan != null || minMaxSpan.maxValueSpan != null) {
-            minMax = sliderMove(0, minMax.slice(), axis.scale.getExtent(), 0, minMaxSpan.minValueSpan, minMaxSpan.maxValueSpan);
+          var proxy = dataZoomModel.findRepresentativeAxisProxy(axisModel);
+          if (proxy) {
+            var minMaxSpan = proxy.getMinMaxSpan();
+            if (minMaxSpan.minValueSpan != null || minMaxSpan.maxValueSpan != null) {
+              minMax = sliderMove(0, minMax.slice(), axis.scale.getExtent(), 0, minMaxSpan.minValueSpan, minMaxSpan.maxValueSpan);
+            }
           }
           dataZoomModel && (snapshot[dataZoomModel.id] = {
             dataZoomId: dataZoomModel.id,
@@ -50990,7 +51051,7 @@
           each(itemCoordSys.dataByAxis, function (axisItem) {
             var axisModel = ecModel.getComponent(axisItem.axisDim + 'Axis', axisItem.axisIndex);
             var axisValue = axisItem.value;
-            if (!axisModel || axisValue == null) {
+            if (!axisModel || !axisModel.axis || axisValue == null) {
               return;
             }
             var axisValueLabel = getValueLabel(axisValue, axisModel.axis, ecModel, axisItem.seriesDataIndices, axisItem.valueLabelOpt);
@@ -55226,11 +55287,14 @@
         range[0] = (range[0] - percentPoint) * scale + percentPoint;
         range[1] = (range[1] - percentPoint) * scale + percentPoint;
         // Restrict range.
-        var minMaxSpan = this.dataZoomModel.findRepresentativeAxisProxy().getMinMaxSpan();
-        sliderMove(0, range, [0, 100], 0, minMaxSpan.minSpan, minMaxSpan.maxSpan);
-        this.range = range;
-        if (lastRange[0] !== range[0] || lastRange[1] !== range[1]) {
-          return range;
+        var proxy = this.dataZoomModel.findRepresentativeAxisProxy();
+        if (proxy) {
+          var minMaxSpan = proxy.getMinMaxSpan();
+          sliderMove(0, range, [0, 100], 0, minMaxSpan.minSpan, minMaxSpan.maxSpan);
+          this.range = range;
+          if (lastRange[0] !== range[0] || lastRange[1] !== range[1]) {
+            return range;
+          }
         }
       },
       pan: makeMover(function (range, axisModel, coordSysInfo, coordSysMainType, controller, e) {
@@ -55422,7 +55486,7 @@
     var HORIZONTAL = 'horizontal';
     var VERTICAL = 'vertical';
     var LABEL_GAP = 5;
-    var SHOW_DATA_SHADOW_SERIES_TYPE = ['line', 'bar', 'candlestick', 'scatter'];
+    var SHOW_DATA_SHADOW_SERIES_TYPE = ['line', 'bar', 'candlestick', 'scatter', 'custom'];
     var REALTIME_ANIMATION_CONFIG = {
       easing: 'cubicOut',
       duration: 100,
@@ -55717,30 +55781,33 @@
         var result;
         var ecModel = this.ecModel;
         dataZoomModel.eachTargetAxis(function (axisDim, axisIndex) {
-          var seriesModels = dataZoomModel.getAxisProxy(axisDim, axisIndex).getTargetSeriesModels();
-          each(seriesModels, function (seriesModel) {
-            if (result) {
-              return;
-            }
-            if (showDataShadow !== true && indexOf(SHOW_DATA_SHADOW_SERIES_TYPE, seriesModel.get('type')) < 0) {
-              return;
-            }
-            var thisAxis = ecModel.getComponent(getAxisMainType(axisDim), axisIndex).axis;
-            var otherDim = getOtherDim(axisDim);
-            var otherAxisInverse;
-            var coordSys = seriesModel.coordinateSystem;
-            if (otherDim != null && coordSys.getOtherAxis) {
-              otherAxisInverse = coordSys.getOtherAxis(thisAxis).inverse;
-            }
-            otherDim = seriesModel.getData().mapDimension(otherDim);
-            result = {
-              thisAxis: thisAxis,
-              series: seriesModel,
-              thisDim: axisDim,
-              otherDim: otherDim,
-              otherAxisInverse: otherAxisInverse
-            };
-          }, this);
+          var axisProxy = dataZoomModel.getAxisProxy(axisDim, axisIndex);
+          if (axisProxy) {
+            var seriesModels = axisProxy.getTargetSeriesModels();
+            each(seriesModels, function (seriesModel) {
+              if (result) {
+                return;
+              }
+              if (showDataShadow !== true && indexOf(SHOW_DATA_SHADOW_SERIES_TYPE, seriesModel.get('type')) < 0) {
+                return;
+              }
+              var thisAxis = ecModel.getComponent(getAxisMainType(axisDim), axisIndex).axis;
+              var otherDim = getOtherDim(axisDim);
+              var otherAxisInverse;
+              var coordSys = seriesModel.coordinateSystem;
+              if (otherDim != null && coordSys.getOtherAxis) {
+                otherAxisInverse = coordSys.getOtherAxis(thisAxis).inverse;
+              }
+              otherDim = seriesModel.getData().mapDimension(otherDim);
+              result = {
+                thisAxis: thisAxis,
+                series: seriesModel,
+                thisDim: axisDim,
+                otherDim: otherDim,
+                otherAxisInverse: otherAxisInverse
+              };
+            }, this);
+          }
         }, this);
         return result;
       };
@@ -55888,12 +55955,17 @@
         var dataZoomModel = this.dataZoomModel;
         var handleEnds = this._handleEnds;
         var viewExtend = this._getViewExtent();
-        var minMaxSpan = dataZoomModel.findRepresentativeAxisProxy().getMinMaxSpan();
-        var percentExtent = [0, 100];
-        sliderMove(delta, handleEnds, viewExtend, dataZoomModel.get('zoomLock') ? 'all' : handleIndex, minMaxSpan.minSpan != null ? linearMap(minMaxSpan.minSpan, percentExtent, viewExtend, true) : null, minMaxSpan.maxSpan != null ? linearMap(minMaxSpan.maxSpan, percentExtent, viewExtend, true) : null);
-        var lastRange = this._range;
-        var range = this._range = asc([linearMap(handleEnds[0], viewExtend, percentExtent, true), linearMap(handleEnds[1], viewExtend, percentExtent, true)]);
-        return !lastRange || lastRange[0] !== range[0] || lastRange[1] !== range[1];
+        var proxy = dataZoomModel.findRepresentativeAxisProxy();
+        if (proxy) {
+          var minMaxSpan = proxy.getMinMaxSpan();
+          var percentExtent = [0, 100];
+          sliderMove(delta, handleEnds, viewExtend, dataZoomModel.get('zoomLock') ? 'all' : handleIndex, minMaxSpan.minSpan != null ? linearMap(minMaxSpan.minSpan, percentExtent, viewExtend, true) : null, minMaxSpan.maxSpan != null ? linearMap(minMaxSpan.maxSpan, percentExtent, viewExtend, true) : null);
+          var lastRange = this._range;
+          var range = this._range = asc([linearMap(handleEnds[0], viewExtend, percentExtent, true), linearMap(handleEnds[1], viewExtend, percentExtent, true)]);
+          return !lastRange || lastRange[0] !== range[0] || lastRange[1] !== range[1];
+        } else {
+          return false;
+        }
       };
       SliderZoomView.prototype._updateView = function (nonRealtime) {
         var displaybles = this._displayables;

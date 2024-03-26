@@ -18906,7 +18906,8 @@
         var item = {
           name: rawItem.name,
           displayName: rawItem.displayName,
-          type: rawItem.type
+          type: rawItem.type,
+          stack: rawItem.stack
         };
         // User can set null in dimensions.
         // We don't auto specify name, otherwise a given name may
@@ -28713,13 +28714,16 @@
             var dimInfo = data._dimInfos[dim];
             // Currently, only dimensions that has ordinalMeta can create inverted indices.
             var ordinalMeta = dimInfo.ordinalMeta;
+            var stack = dimInfo.stack;
             var store = data._store;
-            if (ordinalMeta) {
-              invertedIndices = invertedIndicesMap[dim] = new CtorInt32Array$1(ordinalMeta.categories.length);
-              // The default value of TypedArray is 0. To avoid miss
-              // mapping to 0, we should set it as INDEX_NOT_FOUND.
-              for (var i = 0; i < invertedIndices.length; i++) {
-                invertedIndices[i] = INDEX_NOT_FOUND;
+            if (ordinalMeta || stack) {
+              invertedIndices = invertedIndicesMap[dim] = stack ? new Array(store.count()) : new CtorInt32Array$1(ordinalMeta.categories.length);
+              if (ordinalMeta) {
+                // The default value of TypedArray is 0. To avoid miss
+                // mapping to 0, we should set it as INDEX_NOT_FOUND.
+                for (var i = 0; i < invertedIndices.length; i++) {
+                  invertedIndices[i] = INDEX_NOT_FOUND;
+                }
               }
               for (var i = 0; i < store.count(); i++) {
                 // Only support the case that all values are distinct.
@@ -28859,6 +28863,9 @@
           }
           dimDefItem.type != null && (resultItem.type = dimDefItem.type);
           dimDefItem.displayName != null && (resultItem.displayName = dimDefItem.displayName);
+          if (dimDefItem.stack) {
+            resultItem.stack = true;
+          }
           var newIdx = resultList.length;
           indicesMap[dimIdx] = newIdx;
           resultItem.storeDimIndex = dimIdx;
@@ -29242,7 +29249,7 @@
         }
         if (mayStack && !dimensionInfo.isExtraCoord) {
           // Find the first ordinal dimension as the stackedByDimInfo.
-          if (!byIndex && !stackedByDimInfo && dimensionInfo.ordinalMeta) {
+          if (!byIndex && !stackedByDimInfo && (dimensionInfo.ordinalMeta || dimensionInfo.stack)) {
             stackedByDimInfo = dimensionInfo;
           }
           // Find the first stackable dimension as the stackedDimInfo.
@@ -29826,12 +29833,16 @@
     var roundNumber = round;
     var IntervalScale = /** @class */function (_super) {
       __extends(IntervalScale, _super);
-      function IntervalScale() {
-        var _this = _super !== null && _super.apply(this, arguments) || this;
+      function IntervalScale(settings) {
+        var _this = _super.call(this, settings) || this;
         _this.type = 'interval';
         // Step is calculated in adjustExtent.
         _this._interval = 0;
         _this._intervalPrecision = 2;
+        var ticksGenerator = _this.getSetting('ticksGenerator');
+        if (isFunction(ticksGenerator)) {
+          _this._ticksGenerator = ticksGenerator;
+        }
         return _this;
       }
       IntervalScale.prototype.parse = function (val) {
@@ -29881,7 +29892,17 @@
         var extent = this._extent;
         var niceTickExtent = this._niceExtent;
         var intervalPrecision = this._intervalPrecision;
-        var ticks = [];
+        var ticksGenerator = this._ticksGenerator;
+        var ticks;
+        if (ticksGenerator) {
+          try {
+            ticks = ticksGenerator(extent, interval, niceTickExtent, intervalPrecision);
+            if (ticks) {
+              return ticks;
+            }
+          } catch (_e) {}
+        }
+        ticks = [];
         // If interval is 0, return [];
         if (!interval) {
           return ticks;
@@ -31354,6 +31375,10 @@
               locale: model.ecModel.getLocaleModel(),
               useUTC: model.ecModel.get('useUTC')
             });
+          case 'value':
+            return new IntervalScale({
+              ticksGenerator: model.getTicksGenerator()
+            });
           default:
             // case 'value'/'interval', 'log', or others.
             return new (Scale.getClass(axisType) || IntervalScale)();
@@ -32509,6 +32534,19 @@
        * Get width of band
        */
       Axis.prototype.getBandWidth = function () {
+        if (this.type === 'time') {
+          var timeAxisModel = this.model;
+          var bandWidthCalculator = timeAxisModel.get('bandWidthCalculator');
+          var bandWidth = void 0;
+          if (isFunction(bandWidthCalculator)) {
+            try {
+              bandWidth = bandWidthCalculator(timeAxisModel);
+              if (bandWidth) {
+                return bandWidth;
+              }
+            } catch (_e) {}
+          }
+        }
         var axisExtent = this._extent;
         var dataExtent = this.scale.getExtent();
         var len = dataExtent[1] - dataExtent[0] + (this.onBand ? 1 : 0);
@@ -39264,6 +39302,12 @@
           AxisModel.prototype.getOrdinalMeta = function () {
             return this.__ordinalMeta;
           };
+          AxisModel.prototype.getTicksGenerator = function () {
+            var option = this.option;
+            if (option.type === 'value') {
+              return option.ticksGenerator;
+            }
+          };
           AxisModel.type = axisName + 'Axis.' + axisType;
           AxisModel.defaultOption = defaultOption;
           return AxisModel;
@@ -39676,11 +39720,11 @@
             var scale = axis.scale;
             if (
             // Only value and log axis without interval support alignTicks.
-            isIntervalOrLogScale(scale) && model.get('alignTicks') && model.get('interval') == null) {
+            isIntervalOrLogScale(scale) && model.get('alignTicks') && model.get('interval') == null && model.getTicksGenerator() == null) {
               axisNeedsAlign.push(axis);
             } else {
               niceScaleExtent(scale, model);
-              if (isIntervalOrLogScale(scale)) {
+              if (isIntervalOrLogScale(scale) && !scale.isBlank()) {
                 // Can only align to interval or log axis.
                 alignTo = axis;
               }
@@ -39689,13 +39733,18 @@
           // All axes has set alignTicks. Pick the first one.
           // PENDING. Should we find the axis that both set interval, min, max and align to this one?
           if (axisNeedsAlign.length) {
-            if (!alignTo) {
-              alignTo = axisNeedsAlign.pop();
-              niceScaleExtent(alignTo.scale, alignTo.model);
+            while (!alignTo && axisNeedsAlign.length) {
+              var axis = axisNeedsAlign.pop();
+              niceScaleExtent(axis.scale, axis.model);
+              if (!axis.scale.isBlank()) {
+                alignTo = axis;
+              }
             }
-            each(axisNeedsAlign, function (axis) {
-              alignScaleTicks(axis.scale, axis.model, alignTo.scale);
-            });
+            if (axisNeedsAlign.length && alignTo) {
+              each(axisNeedsAlign, function (axis) {
+                alignScaleTicks(axis.scale, axis.model, alignTo.scale);
+              });
+            }
           }
         }
         updateAxisTicks(axesMap.x);
