@@ -542,7 +542,7 @@ class TooltipView extends ComponentView {
             each(itemCoordSys.dataByAxis, function (axisItem) {
                 const axisModel = ecModel.getComponent(axisItem.axisDim + 'Axis', axisItem.axisIndex) as AxisBaseModel;
                 const axisValue = axisItem.value;
-                if (!axisModel || axisValue == null) {
+                if (!axisModel || !axisModel.axis || axisValue == null) {
                     return;
                 }
                 const axisValueLabel = axisPointerViewHelper.getValueLabel(

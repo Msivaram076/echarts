@@ -148,6 +148,9 @@ export default function prepareSeriesDataSchema(
             }
             dimDefItem.type != null && (resultItem.type = dimDefItem.type);
             dimDefItem.displayName != null && (resultItem.displayName = dimDefItem.displayName);
+            if (dimDefItem.stack) {
+                resultItem.stack = true;
+            }
             const newIdx = resultList.length;
             indicesMap[dimIdx] = newIdx;
             resultItem.storeDimIndex = dimIdx;

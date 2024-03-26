@@ -118,12 +118,13 @@ class Grid implements CoordinateSystemMaster {
                     isIntervalOrLogScale(scale)
                     && model.get('alignTicks')
                     && model.get('interval') == null
+                    && model.getTicksGenerator() == null
                 ) {
                     axisNeedsAlign.push(axis);
                 }
                 else {
                     niceScaleExtent(scale, model);
-                    if (isIntervalOrLogScale(scale)) {  // Can only align to interval or log axis.
+                    if (isIntervalOrLogScale(scale) && !scale.isBlank()) {  // Can only align to interval or log axis.
                         alignTo = axis;
                     }
                 }
@@ -131,18 +132,22 @@ class Grid implements CoordinateSystemMaster {
             // All axes has set alignTicks. Pick the first one.
             // PENDING. Should we find the axis that both set interval, min, max and align to this one?
             if (axisNeedsAlign.length) {
-                if (!alignTo) {
-                    alignTo = axisNeedsAlign.pop();
-                    niceScaleExtent(alignTo.scale, alignTo.model);
+                while (!alignTo && axisNeedsAlign.length) {
+                    const axis = axisNeedsAlign.pop();
+                    niceScaleExtent(axis.scale, axis.model);
+                    if (!axis.scale.isBlank()) {
+                        alignTo = axis;
+                    }
                 }
-
-                each(axisNeedsAlign, axis => {
-                    alignScaleTicks(
-                        axis.scale as IntervalScale | LogScale,
-                        axis.model,
-                        alignTo.scale as IntervalScale | LogScale
-                    );
-                });
+                if (axisNeedsAlign.length && alignTo) {
+                    each(axisNeedsAlign, axis => {
+                        alignScaleTicks(
+                            axis.scale as IntervalScale | LogScale,
+                            axis.model,
+                            alignTo.scale as IntervalScale | LogScale
+                        );
+                    });
+                }
             }
         }
 

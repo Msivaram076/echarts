@@ -83,7 +83,10 @@ const dataZoomProcessor: StageHandler = {
             // init stage and not after action dispatch handler, because
             // reset should be called after seriesData.restoreData.
             dataZoomModel.eachTargetAxis(function (axisDim, axisIndex) {
-                dataZoomModel.getAxisProxy(axisDim, axisIndex).reset(dataZoomModel);
+                const axisProxy = dataZoomModel.getAxisProxy(axisDim, axisIndex);
+                if (axisProxy) {
+                    axisProxy.reset(dataZoomModel);
+                }
             });
 
             // Caution: data zoom filtering is order sensitive when using
@@ -101,7 +104,10 @@ const dataZoomProcessor: StageHandler = {
             // So we should filter x-axis after reset x-axis immediately,
             // and then reset y-axis and filter y-axis.
             dataZoomModel.eachTargetAxis(function (axisDim, axisIndex) {
-                dataZoomModel.getAxisProxy(axisDim, axisIndex).filterData(dataZoomModel, api);
+                const axisProxy = dataZoomModel.getAxisProxy(axisDim, axisIndex);
+                if (axisProxy) {
+                    axisProxy.filterData(dataZoomModel, api);
+                }
             });
         });
 

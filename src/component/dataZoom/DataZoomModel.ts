@@ -527,7 +527,10 @@ class DataZoomModel<Opts extends DataZoomOption = DataZoomOption> extends Compon
             }
         }
         else {
-            return this.getAxisProxy(axisDim, axisIndex).getDataValueWindow();
+            const axisProxy = this.getAxisProxy(axisDim, axisIndex);
+            if (axisProxy) {
+              return axisProxy.getDataValueWindow();
+            }
         }
     }
 
@@ -548,10 +551,10 @@ class DataZoomModel<Opts extends DataZoomOption = DataZoomOption> extends Compon
             const axisInfo = this._targetAxisInfoMap.get(axisDim);
             for (let j = 0; j < axisInfo.indexList.length; j++) {
                 const proxy = this.getAxisProxy(axisDim, axisInfo.indexList[j]);
-                if (proxy.hostedBy(this)) {
+                if (proxy && proxy.hostedBy(this)) {
                     return proxy;
                 }
-                if (!firstProxy) {
+                if (proxy && !firstProxy) {
                     firstProxy = proxy;
                 }
             }

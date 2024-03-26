@@ -119,7 +119,9 @@ import type {
     LabelLayoutOptionCallbackParams,
     LabelLayoutOptionCallback,
     TooltipPositionCallback,
-    TooltipPositionCallbackParams
+    TooltipPositionCallbackParams,
+    ValueAxisTicksGenerator,
+    TimeAxisBandWidthCalculator
 } from '../util/types';
 
 interface ToolboxComponentOption extends ToolboxOption {
@@ -294,5 +296,8 @@ export {
     CustomSeriesRenderItemParams,
     CustomSeriesRenderItemAPI,
     CustomSeriesRenderItemReturn,
-    CustomSeriesRenderItem
+    CustomSeriesRenderItem,
+
+    ValueAxisTicksGenerator,
+    TimeAxisBandWidthCalculator
 };

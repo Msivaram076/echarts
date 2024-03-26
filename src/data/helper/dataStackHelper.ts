@@ -103,7 +103,7 @@ export function enableDataStack(
 
         if (mayStack && !dimensionInfo.isExtraCoord) {
             // Find the first ordinal dimension as the stackedByDimInfo.
-            if (!byIndex && !stackedByDimInfo && dimensionInfo.ordinalMeta) {
+            if (!byIndex && !stackedByDimInfo && (dimensionInfo.ordinalMeta || dimensionInfo.stack)) {
                 stackedByDimInfo = dimensionInfo;
             }
             // Find the first stackable dimension as the stackedDimInfo.

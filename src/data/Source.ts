@@ -424,7 +424,8 @@ function normalizeDimensionsOption(dimensionsDefine: DimensionDefinitionLoose[])
         const item: DimensionDefinition = {
             name: rawItem.name,
             displayName: rawItem.displayName,
-            type: rawItem.type
+            type: rawItem.type,
+            stack: rawItem.stack
         };
 
         // User can set null in dimensions.

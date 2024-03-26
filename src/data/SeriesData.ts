@@ -1385,15 +1385,20 @@ class SeriesData<
                 const dimInfo = data._dimInfos[dim];
                 // Currently, only dimensions that has ordinalMeta can create inverted indices.
                 const ordinalMeta = dimInfo.ordinalMeta;
+                const stack = dimInfo.stack;
                 const store = data._store;
-                if (ordinalMeta) {
-                    invertedIndices = invertedIndicesMap[dim] = new CtorInt32Array(
+                if (ordinalMeta || stack) {
+                    invertedIndices = invertedIndicesMap[dim] = stack
+                        ? new Array(store.count())
+                        : new CtorInt32Array(
                         ordinalMeta.categories.length
                     );
-                    // The default value of TypedArray is 0. To avoid miss
-                    // mapping to 0, we should set it as INDEX_NOT_FOUND.
-                    for (let i = 0; i < invertedIndices.length; i++) {
-                        invertedIndices[i] = INDEX_NOT_FOUND;
+                    if (ordinalMeta) {
+                        // The default value of TypedArray is 0. To avoid miss
+                        // mapping to 0, we should set it as INDEX_NOT_FOUND.
+                        for (let i = 0; i < invertedIndices.length; i++) {
+                            invertedIndices[i] = INDEX_NOT_FOUND;
+                        }
                     }
                     for (let i = 0; i < store.count(); i++) {
                         // Only support the case that all values are distinct.

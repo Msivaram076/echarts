@@ -22,7 +22,8 @@ import * as numberUtil from '../util/number';
 import * as formatUtil from '../util/format';
 import Scale from './Scale';
 import * as helper from './helper';
-import {ScaleTick, Dictionary} from '../util/types';
+import {ScaleTick, Dictionary, ValueAxisTicksGenerator} from '../util/types';
+import {isFunction} from 'zrender/lib/core/util';
 
 const roundNumber = numberUtil.round;
 
@@ -36,6 +37,15 @@ class IntervalScale<SETTING extends Dictionary<unknown> = Dictionary<unknown>> e
     protected _niceExtent: [number, number];
     private _intervalPrecision: number = 2;
 
+    private readonly _ticksGenerator: ValueAxisTicksGenerator;
+
+    constructor(settings?: SETTING) {
+        super(settings);
+        const ticksGenerator = this.getSetting('ticksGenerator');
+        if (isFunction(ticksGenerator)) {
+            this._ticksGenerator = ticksGenerator as ValueAxisTicksGenerator;
+        }
+    }
 
     parse(val: number): number {
         return val;
@@ -94,8 +104,19 @@ class IntervalScale<SETTING extends Dictionary<unknown> = Dictionary<unknown>> e
         const extent = this._extent;
         const niceTickExtent = this._niceExtent;
         const intervalPrecision = this._intervalPrecision;
+        const ticksGenerator = this._ticksGenerator;
 
-        const ticks = [] as ScaleTick[];
+        let ticks: ScaleTick[];
+        if (ticksGenerator) {
+            try {
+                ticks = ticksGenerator(extent, interval, niceTickExtent, intervalPrecision);
+                if (ticks) {
+                    return ticks;
+                }
+            }
+            catch (_e) {}
+        }
+        ticks = [];
         // If interval is 0, return [];
         if (!interval) {
             return ticks;

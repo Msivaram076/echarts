@@ -25,8 +25,8 @@ import {
     fetchLayoutMode
 } from '../util/layout';
 import OrdinalMeta from '../data/OrdinalMeta';
-import { DimensionName, BoxLayoutOptionMixin, OrdinalRawValue } from '../util/types';
-import { AxisBaseOption, AXIS_TYPES, CategoryAxisBaseOption } from './axisCommonTypes';
+import {DimensionName, BoxLayoutOptionMixin, OrdinalRawValue, ValueAxisTicksGenerator} from '../util/types';
+import {AxisBaseOption, AXIS_TYPES, CategoryAxisBaseOption, ValueAxisBaseOption} from './axisCommonTypes';
 import GlobalModel from '../model/Global';
 import { each, merge } from 'zrender/src/core/util';
 import { EChartsExtensionInstallRegisters } from '../extension';
@@ -37,6 +37,7 @@ type Constructor<T> = new (...args: any[]) => T;
 export interface AxisModelExtendedInCreator {
     getCategories(rawData?: boolean): OrdinalRawValue[] | CategoryAxisBaseOption['data']
     getOrdinalMeta(): OrdinalMeta
+    getTicksGenerator(): ValueAxisTicksGenerator
 }
 
 /**
@@ -111,6 +112,13 @@ export default function axisModelCreator<
 
             getOrdinalMeta(): OrdinalMeta {
                 return this.__ordinalMeta;
+            }
+
+            getTicksGenerator(): ValueAxisTicksGenerator {
+                const option = this.option;
+                if (option.type === 'value') {
+                    return (option as ValueAxisBaseOption).ticksGenerator;
+                }
             }
         }
 

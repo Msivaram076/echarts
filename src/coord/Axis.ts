@@ -28,8 +28,9 @@ import Scale from '../scale/Scale';
 import { DimensionName, ScaleDataValue, ScaleTick } from '../util/types';
 import OrdinalScale from '../scale/Ordinal';
 import Model from '../model/Model';
-import { AxisBaseOption, CategoryAxisBaseOption, OptionAxisType } from './axisCommonTypes';
+import {AxisBaseOption, CategoryAxisBaseOption, OptionAxisType, TimeAxisBaseOption} from './axisCommonTypes';
 import { AxisBaseModel } from './AxisBaseModel';
+import {isFunction} from 'zrender/lib/core/util';
 
 const NORMALIZED_EXTENT = [0, 1] as [number, number];
 
@@ -243,6 +244,20 @@ class Axis {
      * Get width of band
      */
     getBandWidth(): number {
+        if (this.type === 'time') {
+            const timeAxisModel = this.model as AxisBaseModel<TimeAxisBaseOption>;
+            const bandWidthCalculator = timeAxisModel.get('bandWidthCalculator');
+            let bandWidth: number;
+            if (isFunction(bandWidthCalculator)) {
+                try {
+                    bandWidth = bandWidthCalculator(timeAxisModel);
+                    if (bandWidth) {
+                        return bandWidth;
+                    }
+                }
+                catch (_e) {}
+            }
+        }
         const axisExtent = this._extent;
         const dataExtent = this.scale.getExtent();
 

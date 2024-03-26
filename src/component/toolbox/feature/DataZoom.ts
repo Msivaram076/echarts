@@ -158,12 +158,15 @@ class DataZoomFeature extends ToolboxFeature<ToolboxDataZoomFeatureOption> {
             const dataZoomModel = findDataZoom(dimName, axisModel, ecModel);
 
             // Restrict range.
-            const minMaxSpan = dataZoomModel.findRepresentativeAxisProxy(axisModel).getMinMaxSpan();
-            if (minMaxSpan.minValueSpan != null || minMaxSpan.maxValueSpan != null) {
-                minMax = sliderMove(
-                    0, minMax.slice(), axis.scale.getExtent(), 0,
-                    minMaxSpan.minValueSpan, minMaxSpan.maxValueSpan
-                );
+            const proxy = dataZoomModel.findRepresentativeAxisProxy(axisModel);
+            if (proxy) {
+                const minMaxSpan = proxy.getMinMaxSpan();
+                if (minMaxSpan.minValueSpan != null || minMaxSpan.maxValueSpan != null) {
+                    minMax = sliderMove(
+                        0, minMax.slice(), axis.scale.getExtent(), 0,
+                        minMaxSpan.minValueSpan, minMaxSpan.maxValueSpan
+                    );
+                }
             }
 
             dataZoomModel && (snapshot[dataZoomModel.id] = {

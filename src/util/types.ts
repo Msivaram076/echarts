@@ -49,6 +49,8 @@ import { Source } from '../data/Source';
 import Model from '../model/Model';
 import { DataStoreDimensionType } from '../data/DataStore';
 import { DimensionUserOuputEncode } from '../data/helper/dimensionHelper';
+import {AxisBaseModel} from '../coord/AxisBaseModel';
+import {TimeAxisBaseOption} from '../coord/axisCommonTypes';
 
 
 
@@ -421,6 +423,11 @@ export interface OrdinalScaleTick extends ScaleTick {
     value: number
 };
 
+export type ValueAxisTicksGenerator = (extent?: number[], interval?: number,
+                                       niceTickExtent?: number[], intervalPrecision?: number) => ScaleTick[];
+
+export type TimeAxisBandWidthCalculator = (model: AxisBaseModel<TimeAxisBaseOption>) => number;
+
 // Can only be string or index, because it is used in object key in some code.
 // Making the type alias here just intending to show the meaning clearly in code.
 export type DimensionIndex = number;
@@ -451,7 +458,8 @@ export interface DataVisualDimensions {
 export type DimensionDefinition = {
     type?: DataStoreDimensionType,
     name?: DimensionName,
-    displayName?: string
+    displayName?: string;
+    stack?: boolean;
 };
 export type DimensionDefinitionLoose = DimensionDefinition['name'] | DimensionDefinition;
 

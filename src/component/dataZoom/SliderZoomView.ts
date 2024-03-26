@@ -54,7 +54,7 @@ const DEFAULT_MOVE_HANDLE_SIZE = 7;
 const HORIZONTAL = 'horizontal';
 const VERTICAL = 'vertical';
 const LABEL_GAP = 5;
-const SHOW_DATA_SHADOW_SERIES_TYPE = ['line', 'bar', 'candlestick', 'scatter'];
+const SHOW_DATA_SHADOW_SERIES_TYPE = ['line', 'bar', 'candlestick', 'scatter', 'custom'];
 
 const REALTIME_ANIMATION_CONFIG = {
     easing: 'cubicOut',
@@ -479,45 +479,46 @@ class SliderZoomView extends DataZoomView {
         const ecModel = this.ecModel;
 
         dataZoomModel.eachTargetAxis(function (axisDim, axisIndex) {
-            const seriesModels = dataZoomModel
-                .getAxisProxy(axisDim, axisIndex)
-                .getTargetSeriesModels();
+            const axisProxy = dataZoomModel.getAxisProxy(axisDim, axisIndex);
+            if (axisProxy) {
+                const seriesModels = axisProxy
+                    .getTargetSeriesModels();
 
-            each(seriesModels, function (seriesModel) {
-                if (result) {
-                    return;
-                }
+                each(seriesModels, function (seriesModel) {
+                    if (result) {
+                        return;
+                    }
 
-                if (showDataShadow !== true && indexOf(
+                    if (showDataShadow !== true && indexOf(
                         SHOW_DATA_SHADOW_SERIES_TYPE, seriesModel.get('type')
                     ) < 0
-                ) {
-                    return;
-                }
+                    ) {
+                        return;
+                    }
 
-                const thisAxis = (
-                    ecModel.getComponent(getAxisMainType(axisDim), axisIndex) as AxisBaseModel
-                ).axis;
-                let otherDim = getOtherDim(axisDim);
-                let otherAxisInverse;
-                const coordSys = seriesModel.coordinateSystem;
+                    const thisAxis = (
+                        ecModel.getComponent(getAxisMainType(axisDim), axisIndex) as AxisBaseModel
+                    ).axis;
+                    let otherDim = getOtherDim(axisDim);
+                    let otherAxisInverse;
+                    const coordSys = seriesModel.coordinateSystem;
 
-                if (otherDim != null && coordSys.getOtherAxis) {
-                    otherAxisInverse = coordSys.getOtherAxis(thisAxis).inverse;
-                }
+                    if (otherDim != null && coordSys.getOtherAxis) {
+                        otherAxisInverse = coordSys.getOtherAxis(thisAxis).inverse;
+                    }
 
-                otherDim = seriesModel.getData().mapDimension(otherDim);
+                    otherDim = seriesModel.getData().mapDimension(otherDim);
 
-                result = {
-                    thisAxis: thisAxis,
-                    series: seriesModel,
-                    thisDim: axisDim,
-                    otherDim: otherDim,
-                    otherAxisInverse: otherAxisInverse
-                };
+                    result = {
+                        thisAxis: thisAxis,
+                        series: seriesModel,
+                        thisDim: axisDim,
+                        otherDim: otherDim,
+                        otherAxisInverse: otherAxisInverse
+                    };
 
-            }, this);
-
+                }, this);
+            }
         }, this);
 
         return result;
@@ -709,27 +710,32 @@ class SliderZoomView extends DataZoomView {
         const dataZoomModel = this.dataZoomModel;
         const handleEnds = this._handleEnds;
         const viewExtend = this._getViewExtent();
-        const minMaxSpan = dataZoomModel.findRepresentativeAxisProxy().getMinMaxSpan();
-        const percentExtent = [0, 100];
+        const proxy = dataZoomModel.findRepresentativeAxisProxy();
+        if (proxy) {
+            const minMaxSpan = proxy.getMinMaxSpan();
+            const percentExtent = [0, 100];
 
-        sliderMove(
-            delta,
-            handleEnds,
-            viewExtend,
-            dataZoomModel.get('zoomLock') ? 'all' : handleIndex,
-            minMaxSpan.minSpan != null
-                ? linearMap(minMaxSpan.minSpan, percentExtent, viewExtend, true) : null,
-            minMaxSpan.maxSpan != null
-                ? linearMap(minMaxSpan.maxSpan, percentExtent, viewExtend, true) : null
-        );
+            sliderMove(
+                delta,
+                handleEnds,
+                viewExtend,
+                dataZoomModel.get('zoomLock') ? 'all' : handleIndex,
+                minMaxSpan.minSpan != null
+                    ? linearMap(minMaxSpan.minSpan, percentExtent, viewExtend, true) : null,
+                minMaxSpan.maxSpan != null
+                    ? linearMap(minMaxSpan.maxSpan, percentExtent, viewExtend, true) : null
+            );
 
-        const lastRange = this._range;
-        const range = this._range = asc([
-            linearMap(handleEnds[0], viewExtend, percentExtent, true),
-            linearMap(handleEnds[1], viewExtend, percentExtent, true)
-        ]);
+            const lastRange = this._range;
+            const range = this._range = asc([
+                linearMap(handleEnds[0], viewExtend, percentExtent, true),
+                linearMap(handleEnds[1], viewExtend, percentExtent, true)
+            ]);
 
-        return !lastRange || lastRange[0] !== range[0] || lastRange[1] !== range[1];
+            return !lastRange || lastRange[0] !== range[0] || lastRange[1] !== range[1];
+        } else {
+            return false;
+        }
     }
 
     private _updateView(nonRealtime?: boolean) {

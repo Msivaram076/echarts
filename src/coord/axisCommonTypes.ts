@@ -17,13 +17,22 @@
 * under the License.
 */
 
-import { TextAlign, TextVerticalAlign } from 'zrender/src/core/types';
+import {TextAlign, TextVerticalAlign} from 'zrender/src/core/types';
 import {
-    TextCommonOption, LineStyleOption, OrdinalRawValue, ZRColor,
-    AreaStyleOption, ComponentOption, ColorString,
-    AnimationOptionMixin, Dictionary, ScaleDataValue, CommonAxisPointerOption
+    AnimationOptionMixin,
+    AreaStyleOption,
+    ColorString,
+    CommonAxisPointerOption,
+    ComponentOption,
+    Dictionary,
+    LineStyleOption,
+    OrdinalRawValue,
+    ScaleDataValue,
+    TextCommonOption, TimeAxisBandWidthCalculator,
+    ValueAxisTicksGenerator,
+    ZRColor
 } from '../util/types';
-import { TextStyleProps } from 'zrender/src/graphic/Text';
+import {TextStyleProps} from 'zrender/src/graphic/Text';
 
 
 export const AXIS_TYPES = {value: 1, category: 1, time: 1, log: 1} as const;
@@ -80,7 +89,6 @@ export interface AxisBaseOptionCommon extends ComponentOption,
      * + null/undefined: auto decide max value (consider pretty look and boundaryGap).
      */
     max?: ScaleDataValue | 'dataMax' | ((extent: {min: number, max: number}) => ScaleDataValue);
-
 }
 
 export interface NumericAxisBaseOptionCommon extends AxisBaseOptionCommon {
@@ -114,7 +122,8 @@ export interface NumericAxisBaseOptionCommon extends AxisBaseOptionCommon {
      *
      * Will be ignored if interval is set.
      */
-    alignTicks?: boolean
+    alignTicks?: boolean;
+
 }
 
 export interface CategoryAxisBaseOption extends AxisBaseOptionCommon {
@@ -154,15 +163,19 @@ export interface ValueAxisBaseOption extends NumericAxisBaseOptionCommon {
      * + `true`: the axis may not contain zero position.
      */
      scale?: boolean;
+
+    ticksGenerator?: ValueAxisTicksGenerator;
 }
 export interface LogAxisBaseOption extends NumericAxisBaseOptionCommon {
     type?: 'log';
     axisLabel?: AxisLabelOption<'log'>;
     logBase?: number;
 }
+
 export interface TimeAxisBaseOption extends NumericAxisBaseOptionCommon {
     type?: 'time';
     axisLabel?: AxisLabelOption<'time'>;
+    bandWidthCalculator?: TimeAxisBandWidthCalculator;
 }
 interface AxisNameTextStyleOption extends TextCommonOption {
     rich?: Dictionary<TextCommonOption>

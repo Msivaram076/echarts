@@ -41,6 +41,8 @@ class SeriesDimensionDefine {
      */
     displayName?: string;
 
+    stack?: boolean;
+
     // FIXME: check whether it is still used.
     // See Series.ts#formatArrayValue
     tooltip?: boolean;

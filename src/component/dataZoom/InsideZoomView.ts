@@ -118,14 +118,17 @@ const getRangeHandlers: {
         range[1] = (range[1] - percentPoint) * scale + percentPoint;
 
         // Restrict range.
-        const minMaxSpan = this.dataZoomModel.findRepresentativeAxisProxy().getMinMaxSpan();
+        const proxy = this.dataZoomModel.findRepresentativeAxisProxy();
+        if (proxy) {
+          const minMaxSpan = proxy.getMinMaxSpan();
 
-        sliderMove(0, range, [0, 100], 0, minMaxSpan.minSpan, minMaxSpan.maxSpan);
+          sliderMove(0, range, [0, 100], 0, minMaxSpan.minSpan, minMaxSpan.maxSpan);
 
-        this.range = range;
+          this.range = range;
 
-        if (lastRange[0] !== range[0] || lastRange[1] !== range[1]) {
+          if (lastRange[0] !== range[0] || lastRange[1] !== range[1]) {
             return range;
+          }
         }
     },
 

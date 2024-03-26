@@ -205,6 +205,12 @@ export function createScaleByModel(model: AxisBaseModel, axisType?: string): Sca
                     locale: model.ecModel.getLocaleModel(),
                     useUTC: model.ecModel.get('useUTC')
                 });
+            case 'value':
+                return new IntervalScale(
+                    {
+                        ticksGenerator: model.getTicksGenerator()
+                    }
+                );
             default:
                 // case 'value'/'interval', 'log', or others.
                 return new (Scale.getClass(axisType) || IntervalScale)();
