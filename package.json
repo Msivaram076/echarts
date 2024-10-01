@@ -168,6 +168,7 @@
     "./lib/chart/themeRiver": "./lib/chart/themeRiver.js",
     "./lib/chart/tree": "./lib/chart/tree.js",
     "./lib/chart/treemap": "./lib/chart/treemap.js",
+    "./lib/coord/axisHelper": "./lib/coord/axisHelper.js",
     "./lib/component/aria": "./lib/component/aria.js",
     "./lib/component/axisPointer": "./lib/component/axisPointer.js",
     "./lib/component/brush": "./lib/component/brush.js",
