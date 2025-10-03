@@ -64,7 +64,7 @@
   },
   "dependencies": {
     "tslib": "2.3.0",
-    "zrender": "https://github.com/thingsboard/zrender/archive/5.5.0-TB.tar.gz"
+    "zrender": "https://github.com/Msivaram076/zrender/archive/5.5.0-TB.tar.gz"
   },
   "devDependencies": {
     "@babel/code-frame": "7.10.4",
